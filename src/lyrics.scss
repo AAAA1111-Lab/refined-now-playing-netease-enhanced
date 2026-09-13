@@ -84,7 +84,13 @@ body.rnp-lyric-animation-timing-lazy .rnp-lyrics:not(.scrolling){
 	position: absolute;
 	transform-origin: left center;
 	transition: transform 0.5s var(--lyric-timing-function), filter 0.5s ease, opacity 0.5s ease;
-	will-change: transform, filter, opacity;
+	// 变更：去掉 filter 提示（发光已改为静态层+透明度动画，不再逐帧动滤镜），降低层复杂度
+	will-change: transform, opacity;
+	// 远离焦点的行放弃常驻合成层：合成器会在过渡期间自动提升它们，
+	// 静止时释放，避免几百个常驻层拖慢一切滚动/动画帧
+	&.rnp-line-far {
+		will-change: auto;
+	}
 }
 body.original-lyric-bold {
 	.rnp-lyrics-line {
@@ -132,7 +138,19 @@ body.original-lyric-bold {
 		}
 	}
 	.rnp-karaoke-word {
+		position: relative;
 		display: inline-block;
+		// 发光副本：静态滤镜 + 透明度动画，替代逐帧滤镜动画
+		.rnp-karaoke-word-glow {
+			position: absolute;
+			left: 0;
+			top: 0;
+			margin: 0;
+			pointer-events: none;
+			user-select: none;
+			opacity: 0;
+			filter: drop-shadow(0 0 15px rgba(var(--rnp-accent-color-shade-2-rgb), 1)) drop-shadow(0 0 10px rgba(var(--rnp-accent-color-shade-2-rgb), 0.5));
+		}
 		&.end-with-space:not(:last-child) {
 			margin-right: 0.25em;
 		}

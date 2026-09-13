@@ -488,10 +488,11 @@ body.mq-playing:not(.enable-accent-color) .m-pinfo .btn-love.loved:before {
 .g-singlec-comment,
 .g-singlec-comment-detail,
 .g-singlec-comment-top { // comment area action buttons (post comment and back to top)
+    // 变更：移除原 backdrop-filter: blur(36px)——元素本身 opacity:0 不可见，
+    // 但 backdrop-filter 会在滚动评论区时每帧重新模糊背景，造成掉帧
     font-size: 0;
     background: #00000022 !important;
     color: transparent;
-    backdrop-filter: blur(36px);
     opacity: 0 !important;
     border: none !important;
     min-width: 36px;
