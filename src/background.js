@@ -54,12 +54,18 @@ export function Background(props) {
 	}
 
 	useEffect(() => {
-		document.addEventListener('rnp-background-type', (e) => {
+		const onBackgroundTypeChange = (e) => {
 			setType(e.detail.type ?? 'blur');
-		});
-		document.addEventListener('rnp-static-fluid', (e) => {
+		};
+		const onStaticFluidChange = (e) => {
 			setStaticFluid(e.detail ?? false);
-		});
+		};
+		document.addEventListener('rnp-background-type', onBackgroundTypeChange);
+		document.addEventListener('rnp-static-fluid', onStaticFluidChange);
+		return () => {
+			document.removeEventListener('rnp-background-type', onBackgroundTypeChange);
+			document.removeEventListener('rnp-static-fluid', onStaticFluidChange);
+		};
 	}, []);
 	
 	return (
@@ -113,9 +119,7 @@ function GradientBackground(props) {
 	useEffect(() => {
 		const image = new Image();
 		image.crossOrigin = 'Anonymous';
-		console.log('loading image');
 		image.onload = () => {
-			console.log('image loaded');
 			const palette = colorThief.getPalette(image);
 			setGradient(getGradientFromPalette(palette));
 		};
@@ -279,16 +283,22 @@ function FluidBackground(props) {
 
 		const request = useRef(0);
 		useEffect(() => {
+			const dataArrayMax = (arr) => {
+				let max = -Infinity;
+				for (let i = 0; i < arr.length; i++) {
+					if (arr[i] > max) max = arr[i];
+				}
+				return max;
+			};
 			const animate = () => {
 				request.current = requestAnimationFrame(animate);
 				if (!playState.current) return;
-				//processor.current.analyser.getFloatFrequencyData(processor.current.dataArray);
-				//const max = Math.max(...processor.current.dataArray);
-				loadedPlugins.LibFrontendPlay.currentAudioAnalyser.getFloatFrequencyData(processor.current.dataArray);
-				const max = Math.max(...processor.current.dataArray);
-				//const percentage = (max - processor.current.analyser.minDecibels) / (processor.current.analyser.maxDecibels - processor.current.analyser.minDecibels);
+				const analyser = loadedPlugins.LibFrontendPlay?.currentAudioAnalyser;
+				if (!analyser) return;
+				// 逐元素求最大值：避免每帧对 1024 项数组做 spread 展开
+				analyser.getFloatFrequencyData(processor.current.dataArray);
+				const max = dataArrayMax(processor.current.dataArray);
 				const percentage = Math.pow(1.3, max / 20) * 2 - 1;
-				//console.log(max, percentage, processor.current.audio.volume);
 				setDisplacementScale(Math.min(600, Math.max(200, 800 - percentage * 800)));
 			};
 			request.current = requestAnimationFrame(animate);

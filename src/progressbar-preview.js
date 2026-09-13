@@ -1,5 +1,5 @@
 import './progressbar-preview.scss';
-import { getSetting } from './utils.js';
+import { getSetting, batchUpdates } from './utils.js';
 
 const isFMSession = () => {
 	return !document.querySelector(".m-player-fm").classList.contains("f-dn");
@@ -111,7 +111,6 @@ export function ProgressbarPreview(props) {
 		const percent = (xRef.current - rect.left) / rect.width;
 		hoverPercentRef.current = percent;
 		const currentTime = _totalLength.current * percent;
-		setCurrentTime(currentTime);
 		if (_lyrics.current) {
 			let cur = 0;
 			let nonInterludeIndex = 0;
@@ -132,8 +131,12 @@ export function ProgressbarPreview(props) {
 			) {
 				cur = _lyrics.current.length;
 			}
-			setCurrentLine(cur);
-			setCurrentNonInterludeIndex(Math.max(nonInterludeIndex, 1));
+			// 悬浮移动时每次都会更新多个状态，合并为一次渲染
+			batchUpdates(() => {
+				setCurrentTime(currentTime);
+				setCurrentLine(cur);
+				setCurrentNonInterludeIndex(Math.max(nonInterludeIndex, 1));
+			});
 			if (subprogressbarInnerRef.current) {
 				let duration =  _lyrics.current[cur]?.duration;
 				if (duration == 0) {
@@ -141,6 +144,8 @@ export function ProgressbarPreview(props) {
 				}
 				subprogressbarInnerRef.current.style.width = (currentTime - _lyrics.current[cur].time) / duration * 100 + '%';
 			}
+		} else {
+			setCurrentTime(currentTime);
 		}
 	};
 	const updatePosition = () => {
@@ -175,11 +180,22 @@ export function ProgressbarPreview(props) {
 	const onMouseLeave = (e) => {
 		setVisible(false);
 	};
-	const onMouseMove = (e) => {
-		xRef.current = e.clientX;
-		yRef.current = e.clientY;
+	// mousemove 触发频率极高，每次都强制重排 + 触发 React 重渲染，按帧合并处理
+	let mouseMoveScheduled = false;
+	let lastMouseEvent = null;
+	const processMouseMove = () => {
+		mouseMoveScheduled = false;
+		if (!lastMouseEvent) return;
+		xRef.current = lastMouseEvent.clientX;
+		yRef.current = lastMouseEvent.clientY;
 		updateHoverPercent();
 		updatePosition();
+	};
+	const onMouseMove = (e) => {
+		lastMouseEvent = e;
+		if (mouseMoveScheduled) return;
+		mouseMoveScheduled = true;
+		requestAnimationFrame(processMouseMove);
 	};
 	useEffect(() => {
 		if (!progressBarRef.current) {

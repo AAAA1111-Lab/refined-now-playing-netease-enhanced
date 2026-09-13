@@ -1,5 +1,5 @@
 import { parseLyric } from './liblyric/index.ts'
-import { cyrb53, getSetting } from './utils.js'
+import { cyrb53, getSetting, debugLog, debugGroup } from './utils.js'
 import { fetchAMLL } from './amll-provider.js'
 
 const preProcessLyrics = (lyrics) => {
@@ -59,7 +59,7 @@ window.onProcessLyrics = (_rawLyrics, songID) => {
 	}
 
 	if ((rawLyrics?.lrc?.lyric ?? '') != currentRawLRC) {
-		console.log('Update Raw Lyrics', rawLyrics);
+		debugLog('Update Raw Lyrics', rawLyrics);
 		currentRawLRC = (rawLyrics?.lrc?.lyric ?? '') ;
 		const preprocessedLyrics = preProcessLyrics(rawLyrics);
 		setTimeout(async () => {
@@ -70,7 +70,7 @@ window.onProcessLyrics = (_rawLyrics, songID) => {
 				const amll = await fetchAMLL(playingId);
 				if (amll && amll.length > 0) {
 					processedLyricsToUse = amll;
-					console.log('Using AMLL Lyrics');
+					debugLog('Using AMLL Lyrics');
 				}
 			}
 
@@ -121,11 +121,7 @@ window.onProcessLyrics = (_rawLyrics, songID) => {
 			}
 			lyrics.hash = `${betterncm.ncm.getPlaying().id}-${cyrb53(processedLyrics.map((x) => x.originalLyric).join('\\'))}`;
 			window.currentLyrics = lyrics;
-			console.group('Update Processed Lyrics');
-			console.log('lyrics', window.currentLyrics.lyrics);
-			console.log('contributors', window.currentLyrics.contributors);
-			console.log('hash', window.currentLyrics.hash);
-			console.groupEnd();
+			debugGroup('Update Processed Lyrics', lyrics.lyrics, lyrics.contributors, lyrics.hash);
 			document.dispatchEvent(new CustomEvent('lyrics-updated', {detail: window.currentLyrics}));
 		}, 0);
 	}

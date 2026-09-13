@@ -1,4 +1,5 @@
-import { findLast } from "lodash";
+// 按需引入，避免把整个 lodash 打进产物
+import findLast from "lodash/findLast";
 
 export interface DynamicLyricWord {
 	time: number;
