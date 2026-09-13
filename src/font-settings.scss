@@ -2,15 +2,6 @@
 	svg {
 		pointer-events: all;
 	}
-	.MuiAutocomplete-root {
-		margin-bottom: 20px;
-	}
-	.Mui-focused .MuiOutlinedInput-notchedOutline {
-		border-color: var(--rnp-accent-color) !important;
-	}
-	label.MuiFormLabel-root.Mui-focused {
-		color: var(--rnp-accent-color) !important;
-	}
 	.rnp-checkbox-note {
 		padding-left: 0;
 	}
@@ -19,7 +10,7 @@
 		margin-top: 10px;
 		display: flex;
 		align-items: center;
-		
+
 		.rnp-font-preset-button {
 			color: #fff;
 			background: #ffffff44;
@@ -48,6 +39,105 @@
 		}
 	}
 }
-.MuiAutocomplete-root * , .MuiAutocomplete-popper *{
-    font-family: inherit !important;
+
+.rnp-font-select {
+	position: relative;
+	margin-bottom: 20px;
+	font-family: inherit;
+
+	.rnp-font-select-control {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		min-height: 44px;
+		padding: 6px 10px;
+		border: 1px solid #ffffff33;
+		border-radius: 6px;
+		background: #ffffff11;
+		cursor: text;
+
+		&:hover {
+			border-color: #ffffff66;
+		}
+	}
+
+	&.open .rnp-font-select-control {
+		border-color: var(--rnp-accent-color);
+	}
+
+	.rnp-font-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 6px 3px 10px;
+		border-radius: 5px;
+		background: #ffffff2b;
+		font-size: 90%;
+		line-height: 1.4;
+		user-select: none;
+
+		.rnp-font-chip-remove {
+			border: none;
+			background: transparent;
+			color: #ffffffaa;
+			font-size: 110%;
+			line-height: 1;
+			padding: 0 3px;
+			cursor: pointer;
+
+			&:hover {
+				color: #fff;
+			}
+		}
+	}
+
+	.rnp-font-input {
+		flex: 1;
+		min-width: 90px;
+		border: none;
+		outline: none;
+		background: transparent;
+		color: #fff;
+		font-size: 95%;
+		padding: 4px 2px;
+
+		&::placeholder {
+			color: #ffffff66;
+		}
+	}
+
+	.rnp-font-dropdown {
+		position: absolute;
+		z-index: 30;
+		top: calc(100% + 4px);
+		left: 0;
+		right: 0;
+		max-height: 220px;
+		overflow-y: auto;
+		background: #2b2b2bee;
+		border: 1px solid #ffffff22;
+		border-radius: 6px;
+		box-shadow: 0 6px 24px #00000066;
+		backdrop-filter: blur(20px);
+
+		.rnp-font-option {
+			padding: 7px 12px;
+			font-size: 90%;
+			cursor: pointer;
+
+			&:hover {
+				background: var(--rnp-accent-color, #666);
+			}
+
+			&.rnp-font-option-empty {
+				opacity: .5;
+				cursor: default;
+
+				&:hover {
+					background: transparent;
+				}
+			}
+		}
+	}
 }

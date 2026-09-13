@@ -1,24 +1,31 @@
-import * as React from 'react';
-import TextField from '@mui/material/TextField';
-import Autocomplete from '@mui/material/Autocomplete';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { getSetting, setSetting } from "./utils";
 
-const darkTheme = createTheme({
-	palette: {
-		mode: 'dark',
-	},
-});
+// 与其他组件一致，使用网易云页面提供的全局 React
+// （此前从 'react' 导入会引入打包内 React 副本，与全局 ReactDOM 渲染脱节导致崩溃）
+const useState = React.useState;
+const useEffect = React.useEffect;
+const useRef = React.useRef;
+const useMemo = React.useMemo;
 
 import './font-settings.scss';
 
-const useEffect = React.useEffect;
-const useState = React.useState;
-
+/* 轻量的多选字体选择器，替代原先的 MUI Autocomplete。
+   MUI + emotion 仅在此处使用却占打包体积的约三分之一，
+   自行实现多选 + 过滤 + 自由输入可显著减小产物体积、加快启动。 */
 export function FontSettings(props) {
 	const [fontList, setFontList] = useState([]);
-	const [fontFamily, setFontFamily] = useState(JSON.parse(getSetting('font-family', '[]')));
-	
+	const [fontFamily, setFontFamily] = useState(() => {
+		try {
+			return JSON.parse(getSetting('font-family', '[]')) ?? [];
+		} catch (e) {
+			return [];
+		}
+	});
+	const [inputValue, setInputValue] = useState('');
+	const [open, setOpen] = useState(false);
+
+	const rootRef = useRef(null);
+
 	useEffect(() => {
 		async function getFontList() {
 			setFontList((await legacyNativeCmder.call("os.querySystemFonts"))[1] ?? []);
@@ -43,31 +50,109 @@ export function FontSettings(props) {
 		setSetting('font-family', JSON.stringify(fontFamily));
 	}, [fontFamily]);
 
+	// 点击组件外部时收起下拉
+	useEffect(() => {
+		if (!open) return;
+		const onDocMouseDown = (e) => {
+			if (rootRef.current && !rootRef.current.contains(e.target)) {
+				setOpen(false);
+			}
+		};
+		document.addEventListener('mousedown', onDocMouseDown);
+		return () => {
+			document.removeEventListener('mousedown', onDocMouseDown);
+		};
+	}, [open]);
+
+	const addFont = (font) => {
+		const name = (font ?? '').trim();
+		if (!name) return;
+		setFontFamily((prev) => prev.includes(name) ? prev : [...prev, name]);
+		setInputValue('');
+	};
+	const removeFont = (font) => {
+		setFontFamily((prev) => prev.filter((x) => x !== font));
+	};
+
+	const filteredOptions = useMemo(() => {
+		const query = inputValue.trim().toLowerCase();
+		return fontList
+			.filter((font) => !fontFamily.includes(font))
+			.filter((font) => !query || font.toLowerCase().includes(query))
+			.slice(0, 60);
+	}, [fontList, fontFamily, inputValue]);
+
 	return (
 		<>
-			<ThemeProvider theme={darkTheme}>
-				<Autocomplete
-					multiple
-					value={fontFamily}
-					onChange={(event, newValue) => {
-						setFontFamily(newValue);
-					}}
-					options={fontList}
-					getOptionLabel={(option) => option}
-					defaultValue={[]}
-					fullWidth
-					freeSolo
-					forcePopupIcon={false}
-					renderInput={(params) => (
-						<TextField
-							{...params}
-							variant="outlined"
-							label="选择字体"
-							placeholder=""
-						/>
-					)}
-				/>
-			</ThemeProvider>
+			<div className={`rnp-font-select ${open ? 'open' : ''}`} ref={rootRef}>
+				<div className="rnp-font-select-control" onClick={() => rootRef.current?.querySelector('input')?.focus()}>
+					{
+						fontFamily.map((font) => (
+							<span className="rnp-font-chip" key={font}>
+								{font}
+								<button
+									className="rnp-font-chip-remove"
+									title="移除"
+									onClick={(e) => {
+										e.stopPropagation();
+										removeFont(font);
+									}}
+								>×</button>
+							</span>
+						))
+					}
+					<input
+						className="rnp-font-input"
+						value={inputValue}
+						placeholder={fontFamily.length ? '' : '选择或输入字体'}
+						onChange={(e) => {
+							setInputValue(e.target.value);
+							setOpen(true);
+						}}
+						onFocus={() => setOpen(true)}
+						onKeyDown={(e) => {
+							if (e.key === 'Enter') {
+								e.preventDefault();
+								addFont(inputValue);
+							} else if (e.key === 'Backspace' && !inputValue && fontFamily.length) {
+								removeFont(fontFamily[fontFamily.length - 1]);
+							}
+						}}
+					/>
+				</div>
+				{
+					open && (
+						<div className="rnp-font-dropdown">
+							{
+								filteredOptions.map((font) => (
+									<div
+										className="rnp-font-option"
+										key={font}
+										onMouseDown={(e) => {
+											// 在 blur 之前完成选择
+											e.preventDefault();
+											addFont(font);
+										}}
+									>{font}</div>
+								))
+							}
+							{
+								filteredOptions.length === 0 && inputValue.trim() && (
+									<div className="rnp-font-option rnp-font-option-add" onMouseDown={(e) => {
+										e.preventDefault();
+										addFont(inputValue);
+									}}>添加 "{inputValue.trim()}"</div>
+								)
+							}
+							{
+								filteredOptions.length === 0 && !inputValue.trim() && (
+									<div className="rnp-font-option rnp-font-option-empty">无匹配字体</div>
+								)
+							}
+						</div>
+					)
+				}
+			</div>
 			<span className="rnp-checkbox-note">某些字体可能不在列表中，需要手动输入</span>
 			<span className="rnp-checkbox-note">如果顺序在前的字体缺少某些字符，则会使用顺序在后的字体，依次顺延</span>
 			<label className="rnp-checkbox-label">字体预设</label>
@@ -78,7 +163,7 @@ export function FontSettings(props) {
 			<FontPreset fonts={['Microsoft YaHei UI', 'Microsoft YaHei']} name="微软雅黑" url="" setFontFamily={setFontFamily} fontList={fontList}/>
 			<FontPreset fonts={['Microsoft JhengHei UI', 'Microsoft JhengHei']} name="微软正黑" url="" setFontFamily={setFontFamily} fontList={fontList}/>
 		</>
-	  );
+  );
 }
 function FontPreset(props) {
 	const hasFont = props.fonts.some(font => props.fontList.includes(font));
