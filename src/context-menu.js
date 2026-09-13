@@ -1,4 +1,5 @@
 import './context-menu.scss';
+import { renderRoot, unmountRoot } from './utils.js';
 
 const useEffect = React.useEffect;
 const useLayoutEffect = React.useLayoutEffect;
@@ -62,17 +63,18 @@ function ContextMenu(props) {
 			easing: 'ease-out',
 			fill: 'forwards'
 		}).onfinish = () => {
-			ReactDOM.unmountComponentAtNode(menuRef.current);
-			menuRef.current.remove();
+			unmountRoot(props.parent);
 			props.parent.remove();
 		}
 	}, []);
 
 	useEffect(() => {
-		menuRef.current.focus();
-		menuRef.current.addEventListener('blur', closeMenu);
+		// 捕获元素引用：卸载时 React 已把 ref 置空，清理函数不能再用 menuRef.current
+		const menuEl = menuRef.current;
+		menuEl.focus();
+		menuEl.addEventListener('blur', closeMenu);
 		return () => {
-			menuRef.current.removeEventListener('blur', closeMenu);
+			menuEl.removeEventListener('blur', closeMenu);
 		}
 	}, []);
 
@@ -105,5 +107,5 @@ function ContextMenu(props) {
 export function showContextMenu(x, y, items) {
 	const div = document.createElement('div');
 	document.body.appendChild(div);
-	ReactDOM.render(<ContextMenu items={items} x={x} y={y} parent={div} />, div);
+	renderRoot(div, <ContextMenu items={items} x={x} y={y} parent={div} />);
 }

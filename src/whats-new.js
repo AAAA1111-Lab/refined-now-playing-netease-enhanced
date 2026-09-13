@@ -1,6 +1,6 @@
 import './whats-new.scss';
 import changeLog from './whats-new.json';
-import { getPlugin } from './utils.js';
+import { getPlugin, renderRoot } from './utils.js';
 
 import { compareVersions } from 'compare-versions';
 
@@ -94,5 +94,5 @@ export function whatsNew(force = false) {
 	if (force) {
 		lastVersion = "0.0.0";
 	}
-	ReactDOM.render(<WhatsNew lastVersion={lastVersion}/>, whatsNew);
+	renderRoot(whatsNew, <WhatsNew lastVersion={lastVersion}/>);
 }

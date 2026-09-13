@@ -5,7 +5,7 @@ import './experimental.scss';
 import settingsMenuHTML from './settings-menu.html';
 import './settings-menu.scss';
 import { argb2Rgb, rgb2Argb } from './color-utils.js';
-import { waitForElement, waitForElementAsync, getSetting, setSetting, chunk, copyTextToClipboard, getPlugin } from './utils.js';
+import { waitForElement, waitForElementAsync, getSetting, setSetting, copyTextToClipboard, getPlugin, renderRoot } from './utils.js';
 import './refined-control-bar.js';
 import { Background } from './background.js';
 import { CoverShadow } from './cover-shadow.js';
@@ -18,7 +18,6 @@ import { MiniSongInfo } from './mini-song-info.js';
 import { ProgressbarPreview } from './progressbar-preview.js';
 import { FontSettings } from './font-settings.js';
 import './material-you-compatibility.scss';
-import { createRoot } from 'react-dom/client';
 
 const updateAccentColor = (name, argb, isFM = false) => {
 	const [r, g, b] = [...argb2Rgb(argb)];
@@ -56,9 +55,12 @@ const calcAccentColor = (dom, isFM = false) => {
 	canvas.height = 50;
 	const ctx = canvas.getContext('2d');
 	ctx.drawImage(dom, 0, 0, dom.naturalWidth, dom.naturalHeight, 0, 0, 50, 50);
-	const pixels = chunk(ctx.getImageData(0, 0, 50, 50).data, 4).map((pixel) => {
-		return ((pixel[3] << 24 >>> 0) | (pixel[0] << 16 >>> 0) | (pixel[1] << 8 >>> 0) | pixel[2]) >>> 0;
-	});
+	// 单次遍历打包像素为 ARGB（原实现经 chunk 展开为 O(n²)，每次切歌有明显卡顿）
+	const imageData = ctx.getImageData(0, 0, 50, 50).data;
+	const pixels = new Array(imageData.length / 4);
+	for (let i = 0, p = 0; i < imageData.length; i += 4, p++) {
+		pixels[p] = ((imageData[i + 3] << 24 >>> 0) | (imageData[i] << 16 >>> 0) | (imageData[i + 1] << 8 >>> 0) | imageData[i + 2]) >>> 0;
+	}
 	const quantizedColors = QuantizerCelebi.quantize(pixels, 128);
 	const sortedQuantizedColors = Array.from(quantizedColors).sort((a, b) => b[1] - a[1]);
 
@@ -129,6 +131,18 @@ const updateCDImage = () => {
 
 
 var lastTitle = "";
+// 连续触发的事件统一按帧合并
+const scheduleFrame = (fn) => {
+	let scheduled = false;
+	return () => {
+		if (scheduled) return;
+		scheduled = true;
+		requestAnimationFrame(() => {
+			scheduled = false;
+			fn();
+		});
+	};
+}
 const titleSizeController = document.createElement('style');
 titleSizeController.innerHTML = '';
 document.head.appendChild(titleSizeController);
@@ -137,11 +151,12 @@ const recalculateTitleSize = (forceRefresh = false) => {
 	if (!title) {
 		return;
 	}
-	if (title.innerText === lastTitle && !forceRefresh) {
+	// textContent 与 innerText 对该场景等价，但读取时不会触发强制布局
+	if (title.textContent === lastTitle && !forceRefresh) {
 		return;
 	}
-	lastTitle = title.innerText;
-	const text = title.innerText;
+	lastTitle = title.textContent;
+	const text = title.textContent;
 	const testDiv = document.createElement('div');
 	testDiv.style.position = 'absolute';
 	testDiv.style.top = '-9999px';
@@ -584,8 +599,8 @@ const addSettingsMenu = async (isFM = false) => {
 		const customFont = getOptionDom('#custom-font');
 		bindCheckboxToClass(customFont, 'rnp-custom-font', false);
 		const customFontSectionContainer = getOptionDom('#rnp-custom-font-section');
-		const containerRoot = createRoot(customFontSectionContainer);
-		containerRoot.render(<FontSettings />);
+		// 使用全局 ReactDOM 渲染（内置 createRoot 与页面全局 React 实例脱节会导致 Hook 调用崩溃）
+		renderRoot(customFontSectionContainer, <FontSettings />);
 
 		// 实验性选项
 		const fluidMaxFramerate = getOptionDom('#fluid-max-framerate');
@@ -713,6 +728,8 @@ const toggleFullScreen = (force = null) => {
 }
 
 const addFullScreenButton = () => {
+	// 复用已存在的按钮，避免每次打开正在播放页都重复创建按钮和时钟定时器
+	if (document.querySelector('.rnp-full-screen-button')) return;
 	const fullScreenButton = document.createElement('div');
 	fullScreenButton.classList.add('rnp-full-screen-button');
 	fullScreenButton.title = '全屏';
@@ -766,6 +783,9 @@ Object.defineProperty(HTMLImageElement.prototype, 'src', {
 
 plugin.onLoad(async (p) => {
 	compatibilityWizard();
+
+	// 启动时输出版本号，便于确认实际加载的构建
+	console.log('[RefinedNowPlaying Enhanced] 已加载 v' + (getPlugin().manifest.version || '?'));
 
 	document.body.classList.add('refined-now-playing');
 
@@ -872,9 +892,11 @@ plugin.onLoad(async (p) => {
 			});
 			const lyrics = document.createElement('div');
 			lyrics.classList.add('lyric');
-			ReactDOM.render(<Lyrics />, lyrics);
+			// 先把容器挂进文档、再渲染 React 树：组件在脱离文档的容器上初始化会
+			// 测得全零高度，导致歌词行在初始化时叠在同一位置
 			waitForElement('.g-single-track .g-singlec-ct .n-single .wrap', (dom) => {
 				dom.appendChild(lyrics);
+				ReactDOM.render(<Lyrics />, lyrics);
 			});
 
 			const miniSongInfo = document.createElement('div');
@@ -896,10 +918,10 @@ plugin.onLoad(async (p) => {
 		}
 	}).observe(document.body, { childList: true });
 
-	new MutationObserver(() => {
+	new MutationObserver(scheduleFrame(() => {
 		recalculateTitleSize();
 		calcTitleScroll();
-	}).observe(document.body, { childList: true , subtree: true, attributes: true, characterData: true, attributeFilter: ['src']});
+	})).observe(document.body, { childList: true , subtree: true, attributes: true, characterData: true, attributeFilter: ['src']});
 
 	// Add progressbar hover preview
 	waitForElement('#main-player .prg', (dom) => {

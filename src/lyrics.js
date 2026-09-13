@@ -1,5 +1,6 @@
 import './lyric-provider.js';
-import { getSetting, setSetting, copyTextToClipboard } from './utils.js';
+// 变更：batchUpdates 用于合并原生回调中的连续 setState（原版每次回调触发 3~6 次全量渲染）
+import { getSetting, setSetting, copyTextToClipboard, batchUpdates } from './utils.js';
 import { showContextMenu } from './context-menu';
 import './lyrics.scss';
 
@@ -158,6 +159,8 @@ export function Lyrics(props) {
 		}
 		shouldTransit.current = false;
 		preProcessMapping(e.detail.lyrics);
+		// 变更：批量化合并状态更新（原版为逐个 setState 各自同步渲染一次）
+		batchUpdates(() => {
 		if (!e.detail.amend){
 			setScrollingMode(false);
 			setCurrentLine(0);
@@ -175,6 +178,7 @@ export function Lyrics(props) {
 			shouldTransit.current = true;
 			setRecalcCounter(+ new Date());
 		}
+		});
 	}
 
 	useEffect(() => {
@@ -200,6 +204,8 @@ export function Lyrics(props) {
 	useEffect(() => { // Recalculate height of each line
 		if (!lyrics) return;
 		const container = containerRef.current;
+		// 变更：容器脱离文档时不测量（脱离状态 clientHeight 全 0，会导致歌词行叠在同一位置）
+		if (!container || !container.isConnected) return;
 		const items = container.children;
 		const heights = [];
 		for (const item of items) {
@@ -254,6 +260,8 @@ export function Lyrics(props) {
 	const previousFocusedLineRef = useRef(0);
 	useEffect(() => { // Recalculate vertical positions and transforms of each line
 		if (lyrics == null || lyrics == undefined) return;
+		// 变更：同上，容器脱离文档时不做变换计算
+		if (!containerRef.current || !containerRef.current.isConnected) return;
 
 		const space = fontSize * 1.2;
 		const delayByOffset = (offset) => {
@@ -525,12 +533,15 @@ export function Lyrics(props) {
 			return;
 		}
 		_playState.current = getPlayState();
+		// 变更：批量化合并状态更新
+		batchUpdates(() => {
 		setPlayState(_playState.current);
 		//setPlayState((state.split("|")[1] == "resume"));
 		if (document.querySelector(".m-player-fm .btnp").classList.contains("btnp-pause")) {
 			setCurrentLineForScrolling(currentLine);
 		}
 		setSongId(id);
+		});
 	};
 	const onPlayProgress = (id, progress) => {
 		if (!isCurrentModeSession()) {
@@ -580,12 +591,15 @@ export function Lyrics(props) {
 		}
 		
 		shouldTransit.current = true;
+		// 变更：批量化合并状态更新，换行时只触发一次渲染
+		batchUpdates(() => {
 		if (!_scrollingMode.current) {
 			setScrollingFocusLine(cur);
 			_scrollingFocusLine.current = cur;
 		}
 		setCurrentLine(cur);
 		setCurrentLineForScrolling(curForScrolling);
+		});
 	};
 	useEffect(() => {
 		onPlayProgress(songId, currentTime.current / 1000);
@@ -1080,12 +1094,15 @@ function Line(props) {
 				wordDuration: props.line.dynamicLyric[index].duration
 			};
 
-			const glowTarget = karaokeLineRef.current?.children[index];
+			// 发光层为静态滤镜的副本，动画只驱动 opacity（合成器执行，无逐帧重绘）
+			const wordEl = karaokeLineRef.current?.children[index];
+			const glowTarget = wordEl && wordEl.querySelector('.rnp-karaoke-word-glow');
+			if (!glowTarget) return null;
 			const glowAnimation = glowTarget.animate([
-				{filter: 'drop-shadow(0 0 0px rgba(var(--rnp-accent-color-shade-2-rgb), 0)) drop-shadow(0 0 0px rgba(var(--rnp-accent-color-shade-2-rgb), 0))'},
-				{filter: 'drop-shadow(0 0 15px rgba(var(--rnp-accent-color-shade-2-rgb), 1)) drop-shadow(0 0 10px rgba(var(--rnp-accent-color-shade-2-rgb), 0.5))', offset: fadeIn / duration},
-				{filter: 'drop-shadow(0 0 15px rgba(var(--rnp-accent-color-shade-2-rgb), 1)) drop-shadow(0 0 10px rgba(var(--rnp-accent-color-shade-2-rgb), 0.5))', offset: (fadeIn + keep) / duration},
-				{filter: 'drop-shadow(0 0 0px rgba(var(--rnp-accent-color-shade-2-rgb), 0)) drop-shadow(0 0 0px rgba(var(--rnp-accent-color-shade-2-rgb), 0))', offset: 1}
+				{opacity: 0},
+				{opacity: 1, offset: fadeIn / duration},
+				{opacity: 1, offset: (fadeIn + keep) / duration},
+				{opacity: 0}
 			], {
 				duration: duration,
 				fill: 'forwards',
@@ -1149,7 +1166,7 @@ function Line(props) {
 
 	return (
 		<div
-			className={`rnp-lyrics-line ${offset < 0 ? 'passed' : ''} ${props.line.isInterlude ? 'rnp-interlude' : ''} ${props.line.isDuet ? 'rnp-lyrics-line-duet' : ''} ${props.line.isBG ? 'rnp-lyrics-line-bg' : ''} ${(props.line.highlightForce || props.transforms?.highlightForce) ? 'highlight-force' : ''}`}
+			className={`rnp-lyrics-line ${offset < 0 ? 'passed' : ''} ${props.line.isInterlude ? 'rnp-interlude' : ''} ${props.line.isDuet ? 'rnp-lyrics-line-duet' : ''} ${props.line.isBG ? 'rnp-lyrics-line-bg' : ''} ${props.outOfRangeKaraoke ? 'rnp-line-far' : ''} ${(props.line.highlightForce || props.transforms?.highlightForce) ? 'highlight-force' : ''}`}
 			offset={offset}
 			onClick={() => props.jumpToTime(props.line.time + 50)}
 			onContextMenu={(e) => {
@@ -1217,6 +1234,10 @@ function Line(props) {
 						className={`rnp-karaoke-word ${word?.isCJK ? 'is-cjk' : ''} ${word?.endsWithSpace ? 'end-with-space' : ''}`}
 						style={getKaraokeAnimation(word)}>
 							<span>{word.word}</span>
+							{
+								word?.trailing && props.lyricGlow &&
+								<span className="rnp-karaoke-word-glow" aria-hidden="true">{word.word}</span>
+							}
 							{
 								props.karaokeAnimation == 'slide' && <span className="rnp-karaoke-word-filler" style={getKaraokeAnimation(word)}>{word.word}</span>
 							}

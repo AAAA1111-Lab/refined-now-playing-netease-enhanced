@@ -1,5 +1,6 @@
 import './compatibility-check.scss';
 import { compareVersions } from 'compare-versions';
+import { renderRoot } from './utils.js';
 
 const useState = React.useState;
 const useEffect = React.useEffect;
@@ -232,7 +233,7 @@ export function compatibilityWizard(force = false) {
 	const wizard = document.createElement("div");
 	wizard.id = "refined-now-playing-wizard";
 	document.body.appendChild(wizard);
-	ReactDOM.render(<Wizard />, wizard);
+	renderRoot(wizard, <Wizard />);
 }
 
 function HijackFailureNotice() {
@@ -266,5 +267,5 @@ export async function hijackFailureNoticeCheck() {
 	const notice = document.createElement("div");
 	notice.id = "refined-now-playing-hijack-failure-notice";
 	document.body.appendChild(notice);
-	ReactDOM.render(<HijackFailureNotice />, notice);
+	renderRoot(notice, <HijackFailureNotice />);
 }
